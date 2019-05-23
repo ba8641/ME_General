@@ -1,0 +1,371 @@
+/*	07.05.2017
+ 	ABP_FL_test.run (script file) used to determine the optimal vaccine production, 
+ 	procurement allocations, and the range of vaccine prices that maximize TSS 
+ 	for multiple problem instances
+
+	############################################################################        
+	# This is a MAJOR UPDATE to ABP_L_test.run (02.10.17). This script must    #
+	# call all ABP model elements, definitions, and heuristics as well as the  #
+	# data files. 							                                   #
+	############################################################################
+
+	by Ruben A. Proano
+	rpmeie@rit.edu
+	ROCHESTER INSTITUTE OF TECHNOLOGY
+	
+	NOTE:
+	# 1- This script sequentially determines
+		a) vaccine procurement allocation and vaccines to produce that maximizes 
+		   TSS
+		b) the range of vaccine prices that mantain TSS and maximize TCS for the
+		   procurement allocation
+		c) the range of vaccine prices that maintain TSS and maximize TPF for 
+		   the procurement allocation
+		   
+	 2- Major differences between ABP_L_test.run (2.10.17) and ABP_FL_test.run:
+	    a) ABP_FL_test.run allows the opportunity to solve the vaccine allocation 
+	       problem using the ABPFLTSS problem definition, which FULLY linearizes 
+	       the ABP allocation model, via the implementation of the McCormick 
+	       envelope linearization constraints
+	    b) ABP_FL_test.run allows for a better handling of infeasibilities of
+	       bundle allocations for the ABPTCS and ABPTPF problems. This procedure
+	       is managed by iteratively identifying and dropping a constraint in the 
+	       (irreducible infeasible set of constraints) until an allocation becomes
+	       feasible to a relaxed ABPTCS and ABPTPF. 
+	    c) ABP_FL_test.run sets to 0 all bundle prices corresponding to
+	       allocations that are too small (X[b,m]<=0.1). This facilitates reading
+	       and ensures that if a bundle is not offered in a market the 
+	       the allocation and its low and up prices are zero.
+        d) ABP_FL_test.run prints which constraints were relaxed for each
+           experimental instance if the relaxation was needed
+        e) Changes in the display of summary statistics for each experiment
+        f) This scripts allows for the use of 'theta' the fraction that permits
+           define the price at which no demand for a bundle exists as 
+           theta*R[b,m]
+        g) Eliminates 'tottime' parameter used to track solution times 
+
+	 2- Make sure that ABP_FL.mod and ABP_L_problem_def.mod (July 2017 versions)
+	    are loaded. These versions include constraints and problem definitions 
+	    that allow a complete linearization of the ReturnAnnuity constraint
+
+	 3- The script reads from an input file 'ExpFileDetails' (it could be any 
+	    file) the number of problem instances to solve for, their names, and the 
+	    paths for: the source code (model elements,  problem definitions, 
+	    heuristic ), for the data files, and where to save output files
+	
+	07.05.2017
+
+	07.11.2017 - Added support to the model with multiple entities.
+
+	version I.01
+
+	See additional comments at the end of the file
+*/
+param DeficitE{e in 1..100, m in M, a in A};	#Shows the DeficitE of each antigen in each market
+param DeficitTE{e in 1..100, m in M, a in A} default -1;	#Shows the DeficitE of each antigen in each market
+param numTargets{i in 1..100} default 0;
+
+reset data Countries, annual_births, interest_rate, uncertainty_low, uncertainty_high, alpha, T, C,D, HI, LO, R, S, Xo, bfit, bkpt, d, dH, gni_p, go, hii, k, l, loo, n_antigens, n_bundles, n_linsegments, n_markets, n_producers, name, numiterations, phi, theta, rate, A, A1, B, B1, B2, Bsort, LL, M, N, P, Q, QQ, temps, Xlow, Xup, Ylow, Yup, WOri, WSat, minPrice;
+
+data (PathIn & ExpName[1]);	#Forces the first entity's data to be loaded.
+
+param TempS{b in B};	#Variable that stores the capacity before resetting the problem.
+let {b in B} TempS[b] := S[b];
+param TempC{b in B};	#Variable that stores the capacity before resetting the problem.
+let {b in B} TempC[b] := C[b];
+param OrigC{B};
+param TotalAntigenDemand default 0;
+let{b in B} OrigC[b]:=C[b];
+param Allocation{1..n_entities, B, M};	#Variable that stores X*R for each entity.
+param EntName{ent in 1..n_entities} symbolic;
+param pop{1..12};
+param inc{1..12};
+param RP{b in B, 1..12} default 0;
+
+
+/* Printing headers of summary file for experiments performed with the script, adjusted to be displayed in Excel with ' ' as a separator */
+
+	#print 'Weekday', 'Month', 'Day', 'Time', 'Year', "ExpName[i]", "card(tot_iis_indices)", "TotTSS", "TotTCS", "TotTPF", "_total_solve_elapsed_time", "_total_solve_system_time", "_total_solve_user_time", "_total_solve_time" , {p in P} 'High_Price_profit_for_P' & p, {b in B} 'High_Price_profit_for_B' & b, {p in P} 'Low_Price_profit_for_P' & p, {b in B} 'Low_Price_profit_for_B' & b, {b in B} 'Leftover_for_B' & b >> (PathOut & "sum_performanceC.txt");
+#print "Week", "Month", "Day", "Time", "Year", "ExpName[i]", "card(tot_iis_indices)", "TotTSS", "TotTCS", "TotTPF", "_total_solve_elapsed_time", "_total_solve_system_time", "_total_solve_user_time", "_total_solve_time", "TotTCST", "MV", "TTCS/TCS", "RelDeficit_HP_P", "Deficit_HP_P", "Deficit_LP_P", "Deficit_HP_B", "Deficit_LP_B", "Deficit_antigen", "%_AC_HP", "%_AC_LP", "RelDeficitT_antigen", "DeficitT_antigen", "TotTCSLM", "TotTCSHM", "TotTCSH", "TotTPFL", "TotTPFLM", "TotTPFHM", "TotTPFH" > (PathOut & "sum_performanceC.txt");
+print "Week", "Month", "Day", "Time", "Year", "ExpName[i]", "card(tot_iis_indices)", 
+"TotTSS", "TotTCS", "TotTPF", "_total_solve_elapsed_time", "_total_solve_system_time", 
+"_total_solve_user_time", "_total_solve_time", "MV", "TCSL", "TCSLM", "TCSHM", "TCSH", "TPFL", 
+"TPFLM", "TPFHM", "TPFH", "TCS_HP", "TPF_LP", "TCSL_LP", "TCSLM_LP", 
+"TCSHM_LP", "TCSH_LP", "TPFL_LP", "TPFLM_LP", "TPFHM_LP", "TPFH_LP", {b in B} "g[" & b & "]"
+ > (PathOut & "sum_performanceC.txt");
+ 
+/* Soving ABP with the heuristic, and then using the resulting allocation as 
+   input to ABPTCS and ABPTPF. The three-stage loop is done for each of the 
+   experiments to be tested */
+
+for{ exp in 1..NumExp}
+{
+	let TotTSS:=0;
+	let TotTCS := 0;
+	let TotTCST:=0;
+	let TotTCSLM:=0;
+	let TotTCSHM:=0;
+	let TotTCSH:=0;
+	let TotTPF:=0;
+	let TotTPFT:=0;
+	let TotTPFLM:=0;
+	let TotTPFHM:=0;
+	let TotTPFH:=0;
+
+	let TCS_HP := 0;
+	let TPF_LP := 0;
+	let TCSL_LP := 0;
+	let TCSLM_LP := 0; 
+	let TCSHM_LP := 0;
+	let TCSH_LP := 0;
+	let TPFL_LP := 0;
+	let TPFLM_LP := 0;
+	let TPFHM_LP := 0;
+	let TPFH_LP := 0;
+	
+	let tottime:=0;
+	read n_entities,{i in 1..n_entities}EntName[i] < EntFileDetailsTestFL.txt;
+
+	let {i in 1..12} pop[i]:=0;
+	let {i in 1..12} inc[i]:=0;
+
+	reset data TempS, TempC, DeficitE, DeficitTE, OrigC, X2, Allocation, TotalProfit_h, TotalProfit_l, TotalAntigenDemand, numTargets;
+
+	for{ i in 1..n_entities}
+	{
+
+	#update data;
+	
+		reset data Countries, annual_births, interest_rate, uncertainty_low, uncertainty_high, targetGNI, alpha, T, C,D, HI, LO, R, S, Xo, bfit, bkpt, d, dH, gni_p, go, hii, k, l, loo, n_antigens, n_bundles, n_linsegments, n_markets, n_producers, name, numiterations, phi, theta, rate, A, A1, B, B1, B2, Bsort, LL, M, N, P, Q, QQ, temps, Xlow, Xup, Ylow, Yup, WOri, WSat, minPrice, YHigh, YLow;
+		let M := 1..(1/n_entities);
+		display ("Solving----" & EntName[i]); 
+	
+
+		data (PathIn & EntName[i]);
+	
+		let {m in M} pop[(i-1)*card(M)+m] := l[m];
+		let {m in M} inc[(i-1)*card(M)+m] :=gni_p[m];
+		let {m in M, b in B} RP[b,(i-1)*card(M)+m] :=R[b,m];
+	
+		let {b in B}T[b] := {m in M};
+		let targetGNI:= 1045;
+		let {b in B} minPrice[b]:=.2;
+		let alpha := 1;
+		let {m in M, b in B: R[b,m]<.2} R[b,m]:=.2;
+		let numTargets[i] := numTargets[i] + count{m in M}(gni_p[m]<targetGNI);
+		for {m in M, b in B, q in Q[b]: card(Q[b])>=1} {if R[b,m]< sum{t in N[q]}R[t,m] then{let R[b,m] := sum{t in N[q]}R[t,m]};};
+		let TotalAntigenDemand:= TotalAntigenDemand + sum{m in M, a in A}d[a,m]*l[m];
+
+
+		if i >1 then {let {b in B} S[b] := TempS[b];}
+		else {let {b in B} TempS[b] := S[b];};	# Uses the stored capacity for the new run;
+		if i >1 then {let {b in B} C[b] := TempC[b];}
+		else {let {b in B} TempC[b] := C[b]; let {b in B}OrigC[b]:=C[b];};
+	
+		let PathDrop:= (PathOut & "DropConst/" & EntName[1] & "_");
+		print "" > (PathDrop & "drop.out");
+
+		problem ABPTSSME;
+		restore SuperAdditivity;
+		restore AntigenDemand;
+		restore CapacityME;
+		restore PriceElasticity;
+		restore SegmentedPrices;
+		restore ReservationPriceLimME;
+		restore TargetedSale;
+		restore GenericPrice;
+		restore MaxBDose;
+	
+		# Determining optimal vaccine allocations (choose ONLY ONE of the following four instructions)
+		solve ABPTSSME;	
+	
+		repeat while solve_result ="infeasible"{
+		let iisetindex:= iisetindex union{j in 1.._ncons: _con[j].iis<>"non"};
+		if card(iisetindex)>=1 then {
+		    let tot_iis_indices:= tot_iis_indices union {first(iisetindex)};
+		    print "drop", _conname[first(iisetindex)] > (PathDrop & "drop.out");
+		    commands (PathDrop & "drop.out");
+		   };
+ 
+		   let iisetindex:={};
+		   solve ABPTSSME;
+	       };
+    	
+	
+		let TotTSS:= TotTSS + sum{b in B, m in T[b]} theta*R[b,m]*X[b,m];
+		let tottime:=tottime+ _solve_time;
+		let {m in M, a in A} DeficitE[i,m,a] := (d[a,m]*l[m] - sum{b in B1[a]}X[b,m])/(d[a,m]*l[m]);
+		let {m in M, a in A: gni_p[m] < targetGNI} DeficitTE[i,m,a] := (d[a,m]*l[m] - sum{b in B1[a]}X[b,m])/(d[a,m]*l[m]);
+		let {b in B, m in M} X2[b,m] := X[b,m];
+		let {b in B, m in M} Allocation[i,b,m] := X[b,m]*R[b,m];
+
+		problem ABPTCSME;
+		restore SuperAdditivity2;
+		restore SegmentedPrices;
+		restore CapacityME;
+		restore PriceElasticity;
+		restore ReservationPriceLimME;
+		restore GenericPrice2;
+
+	    # Determining maximum total customer surplus for the best allocations
+
+		solve ABPTCSME; 
+	
+		repeat while solve_result ="infeasible"{
+			let iisetindex:= iisetindex union{j in 1.._ncons: _con[j].iis<>"non"};
+			if card(iisetindex)>=1 then {
+			    let tot_iis_indices:= tot_iis_indices union {first(iisetindex)};
+			    print "drop", _conname[first(iisetindex)] > (PathDrop & "drop.out");
+			    commands (PathDrop & "drop.out");
+		   	};
+		 
+		    	let iisetindex:={};
+		    	solve ABPTCSME;
+	    	};
+    
+   		problem ABPTPFME;
+		restore SuperAdditivity2;
+		restore SegmentedPrices;
+		restore CapacityME;
+		restore PriceElasticity;
+		restore ReservationPriceLimME;
+		restore GenericPrice2;
+		let TotTCS:= TotTCS + TCSME;
+		let TotTCST:= TotTCST + sum{b in B, m in M: gni_p[m]<targetGNI}(theta*R[b,m]-Y[b,m])*X[b,m];
+		let TotTCSLM:= TotTCSLM + sum{b in B, m in M: gni_p[m]>targetGNI and gni_p[m] < lmGNI}(theta*R[b,m]-Y[b,m])*X[b,m];
+		let TotTCSHM:= TotTCSHM + sum{b in B, m in M: gni_p[m]>lmGNI and gni_p[m] < hmGNI}(theta*R[b,m]-Y[b,m])*X[b,m];
+		let TotTCSH:= TotTCSH + sum{b in B, m in M: gni_p[m] > hmGNI}(theta*R[b,m]-Y[b,m])*X[b,m];
+
+		let {b in B, m in M: X[b,m]>0.1} YLow[b,m]:=Y[b,m];
+		let {b in B, m in M: X[b,m]<=0.1} YLow[b,m]:=0;
+		let tottime:=tottime+_solve_time;
+
+
+	    # Determining maximum total profit for the best allocations
+
+		solve ABPTPFME;
+	
+		if solve_result="infeasible" then commands (PathDrop & "drop.out");
+		solve ABPTPFME;
+        repeat while solve_result ="infeasible"{
+		let iisetindex:= iisetindex union{j in 1.._ncons: _con[j].iis<>"non"};
+		if card(iisetindex)>=1 then {
+		 let tot_iis_indices:= tot_iis_indices union {first(iisetindex)};
+		 print "drop", _conname[first(iisetindex)],";" > (PathDrop & "drop.out");
+		 commands (PathDrop & "drop.out");
+		};
+		let iisetindex:={};
+		solve ABPTPFME;
+        };
+	
+	
+	
+		let TotTPF:= TotTPF + sum{b in B, m in T[b]} Y[b,m]*X[b,m];
+		let TotTPFT:= TotTPFT + sum{b in B, m in T[b]: gni_p[m]<targetGNI} Y[b,m]*X[b,m];
+		let TotTPFLM:= TotTPFLM + sum{b in B, m in T[b]: gni_p[m]>targetGNI and gni_p[m] < lmGNI} Y[b,m]*X[b,m];
+		let TotTPFHM:= TotTPFHM + sum{b in B, m in T[b]: gni_p[m]>lmGNI and gni_p[m] < hmGNI} Y[b,m]*X[b,m];
+		let TotTPFH:= TotTPFH + sum{b in B, m in T[b]: gni_p[m] > hmGNI} Y[b,m]*X[b,m];
+		let tottime:=tottime+_solve_time;
+	
+		let {b in B, m in M: X[b,m]>0.1} YHigh[b,m]:= Y[b,m];
+	   	let {b in B, m in M: X[b,m]<=0.1} YHigh[b,m]:= 0;
+	   	
+	   	let TCS_HP := TCS_HP + sum{b in B, m in M}(theta*R[b,m]-YHigh[b,m])*X[b,m];
+	   	let TPF_LP := TPF_LP + sum{b in B, m in M}X[b,m]*YLow[b,m];
+	   	let TCSL_LP := TCSL_LP + sum{b in B, m in M: gni_p[m] < targetGNI}X[b,m]*(theta*R[b,m]-YHigh[b,m]);
+	   	let TCSLM_LP := TCSLM_LP + sum{b in B, m in M: gni_p[m] > targetGNI and gni_p[m] < lmGNI}X[b,m]*(theta*R[b,m]-YHigh[b,m]); 
+		let TCSHM_LP := TCSHM_LP + sum{b in B, m in M: gni_p[m] > lmGNI and gni_p[m] < hmGNI}X[b,m]*(theta*R[b,m]-YHigh[b,m]);
+		let TCSH_LP := TCSH_LP + sum{b in B, m in M: gni_p[m] > hmGNI}X[b,m]*(theta*R[b,m]-YHigh[b,m]);
+		let TPFL_LP := TPFL_LP + sum{b in B, m in M: gni_p[m] < targetGNI}X[b,m]*YLow[b,m];
+		let TPFLM_LP := TPFLM_LP + sum{b in B, m in M: gni_p[m] > targetGNI and gni_p[m] < lmGNI}X[b,m]*YLow[b,m];
+		let TPFHM_LP := TPFHM_LP + sum{b in B, m in M: gni_p[m] > lmGNI and gni_p[m] < hmGNI}X[b,m]*YLow[b,m];
+		let TPFH_LP := TPFH_LP + sum{b in B, m in M: gni_p[m] > hmGNI}X[b,m]*YLow[b,m];
+	   	
+
+		let {p in P} TotalProfit_h[p] := TotalProfit_h[p] + sum{b in B, m in T[b]: k[b]==p}X[b,m]*YHigh[b,m];
+		let {p in P} TotalProfit_l[p] := TotalProfit_l[p] + sum{b in B, m in T[b]: k[b]==p}X[b,m]*YLow[b,m];
+
+		for{b in B}{
+			if producing[b] = 0 then let producing[b] := g[b];
+		};
+
+		let {b in B} BundleProfit_h[b] := BundleProfit_h[b] + sum{m in T[b]}X[b,m]*YHigh[b,m];
+		let {b in B} BundleProfit_l[b] := BundleProfit_l[b] + sum{m in T[b]}X[b,m]*YLow[b,m];
+		 
+		option print_round 4;
+
+		print {b in B, m in M}: b, name[b], m, X[b,m]*g[b], YLow[b,m]*g[b], YHigh[b,m]*g[b] > (PathOut & "out_"& EntName[i]&".txt");
+		print 'DeficitE', {a in A, m in M} 'Market ' & m & ', antigen ' &a > (PathOut & "out_"& EntName[i]&".txt");
+		print 'DeficitE', {a in A, m in M} DeficitE[i, m,a] > (PathOut & "out_"& EntName[i]&".txt");
+		close (PathOut & "out_" & EntName[i]&".txt");
+	
+	#print ctime(), EntName[i], card(tot_iis_indices), TotTSS, TotTCS, TotTPF, _total_solve_elapsed_time, _total_solve_system_time, _total_solve_user_time, _total_solve_time  >> (PathOut & "sum_performanceC.txt");
+
+		let tot_iis_indices:={};
+		close (PathDrop & "drop.out"); 
+
+		let {b in B} TempS[b] := S[b] - sum{m in M}X[b,m];	#Updates the capacity constraint before the next run.
+		let {b in B} TempC[b] := C[b] - sum{m in M}X[b,m];
+
+	
+	};
+
+	let {p in P} TotalProfit_h[p] := TotalProfit_h[p] - sum{b in B: k[b]==p}OrigC[b]*producing[b];
+	let {p in P} TotalProfit_l[p] := TotalProfit_l[p] - sum{b in B: k[b]==p}OrigC[b]*producing[b];
+
+	let {b in B} BundleProfit_h[b] := BundleProfit_h[b] - OrigC[b]*producing[b];
+	let {b in B} BundleProfit_l[b] := BundleProfit_l[b] - OrigC[b]*producing[b];
+	let TotTSS:= TotTSS - sum{b in B}OrigC[b]*producing[b];
+	let TotTPF:= TotTPF - sum{b in B}OrigC[b]*producing[b];
+	let TPF_LP := TPF_LP - sum{b in B}C[b]*producing[b];
+#print 'Weekday', 'Month', 'Day', 'Time', 'Year', "Total", "card(tot_iis_indices)", "TotTSS", "TotTCS", "TotTPF", "_total_solve_elapsed_time", "_total_solve_system_time", "_total_solve_user_time", "_total_solve_time" , {p in P} 'High_Price_profit_for_P' & p, {b in B} 'High_Price_profit_for_B' & b, {p in P} 'Low_Price_profit_for_P' & p, {b in B} 'Low_Price_profit_for_B' & b, {b in B} 'Leftover_for_B' & b >> (PathOut & "sum_performanceC.txt");
+#print ctime(), 'Summary', card(tot_iis_indices), TotTSS, TotTCS, TotTPF, _total_solve_elapsed_time, _total_solve_system_time, _total_solve_user_time, _total_solve_time, {p in P} TotalProfit_h[p], {b in B} BundleProfit_h[b], {p in P} TotalProfit_l[p], {b in B} BundleProfit_l[b], {b in B} TempS[b] >> (PathOut & "sum_performanceC.txt");
+#print ctime(), ExpName[exp], card(tot_iis_indices), TotTSS, TotTCS, TotTPF, _total_solve_elapsed_time, _total_solve_system_time, _total_solve_user_time, _total_solve_time, TotTCST, (TotTCS+TotTPF), (TotTCST/TotTCS), count{p in P}(sum{b in B:k[b]==p}(sum{m in M}(X[b,m]*YHigh[b,m])-C[b]*g[b])<-100), count{p in P} (sum{b in B:k[b]==p}(sum{m in M}(X[b,m]*YLow[b,m])-C[b]*g[b])<-100), count{b in B} (sum{m in M}(X[b,m]*YHigh[b,m])-C[b]*g[b]<-100), count{b in B} (sum{m in M}(X[b,m]*YLow[b,m])-C[b]*g[b] < -100), count{m in M, a in A,i in 1..n_entities} (DeficitE[i,m,a]>100), count{p in P} ((sum{b in B:k[b]==p and g[b] ==1}(C[b] - sum{m in M}(X[b,m]*YHigh[b,m])))/(1e-10+sum{b in B:k[b]==p and g[b] ==1}C[b])>.1), count{p in P} ((sum{b in B:k[b]==p and g[b] ==1}(C[b] - sum{m in M}(X[b,m]*YLow[b,m])))/(1e-10+sum{b in B:k[b]==p and g[b] ==1}C[b])>.1), count{a in A, m in M, i in 1..n_entities} (DeficitE[i,m,a]>100)  >> (PathOut & "sum_performanceC.txt");
+/*print ctime(), ExpName[exp], card(tot_iis_indices), TotTSS, TotTCS, TotTPF, 
+_total_solve_elapsed_time, _total_solve_system_time, _total_solve_user_time, 
+_total_solve_time, TotTCST, (TotTCS+TotTPF), (TotTCST/(1e-10+TotTCS)), 
+(sum{p in P: TotalProfit_h[p] < 0} -TotalProfit_h[p]/(sum{b in B:k[b]==p}(OrigC[b]*producing[b])))/card{P}, 
+count{p in P}(TotalProfit_h[p]<-100), count{p in P} (sum{b in B:k[b]==p}(sum{m in M}(X[b,m]*YLow[b,m])-OrigC[b]*g[b])<-100), 
+count{b in B} (sum{m in M}(X[b,m]*YHigh[b,m])-OrigC[b]*g[b]<-100), count{b in B} (sum{m in M}(X[b,m]*YLow[b,m])-OrigC[b]*g[b] < -100), 
+count{m in M, a in A,i in 1..n_entities} (DeficitE[i,m,a]>100), count{p in P} ((sum{b in B:k[b]==p and g[b] ==1}(OrigC[b] - sum{m in M}(X[b,m]*YHigh[b,m])))/(1e-10+sum{b in B:k[b]==p and g[b] ==1}OrigC[b])>.1), 
+count{p in P} ((sum{b in B:k[b]==p and g[b] ==1}(OrigC[b] - sum{m in M}(X[b,m]*YLow[b,m])))/(1e-10+sum{b in B:k[b]==p and g[b] ==1}OrigC[b])>.1),  
+(sum{a in A, m in M, i in 1..n_entities: DeficitTE[i,m,a]>0} (DeficitTE[i,m,a]) / (numTargets[i]*card(A))), count{a in A, m in M, i in 1..n_entities} (DeficitTE[i,m,a]>0), 
+TotTCSLM, TotTCSHM, 
+TotTCSH, TotTPFT, TotTPFLM, TotTPFHM, TotTPFH >> (PathOut & "sum_performanceC.txt");*/
+	print ctime(), ExpName[exp], card(tot_iis_indices), TotTSS, TotTCS, TotTPF, _total_solve_elapsed_time, _total_solve_system_time, _total_solve_user_time, _total_solve_time, 
+	(TotTCS+TotTPF), TotTCST, 
+	TotTCSLM, TotTCSHM, TotTCSH, TotTPFT, TotTPFLM, TotTPFHM, TotTPFH, 
+	TCS_HP, TPF_LP, TCSL_LP, TCSLM_LP, TCSHM_LP, TCSH_LP, TPFL_LP, TPFLM_LP, TPFHM_LP, TPFH_LP,
+	{b in B} producing[b] >> (PathOut & "sum_performanceC.txt");
+
+
+};
+
+close (PathOut & "sum_performanceC.txt");
+display sum{i in 1..n_entities, b in B, m in M}Allocation[i,b,m];
+
+end;
+
+/* 
+
+Use this script in conjunction with a file 
+ExpFileDetails.txt that contains the instructions below. Feel free to change
+the paths for your source, input, and output folders according to your needs.
+The ABP_FL_test.run and the ExpFileDetailsTest.txt should saved in the same folder. 
+To execute the ABP_FL_test.run, first make its directory a working directory
+in your terminal and simply type "ampl ABP_FL_test.run" in the shell (linux)
+----------------------------
+
+2		    # number of problem instances
+test1		# name of data file for first problem instance
+test2		# name of data file for second problem instance
+"/shared/kgcoe-research/gates/SOURCES/ABPModular/"	                    # path to folder with Source code
+"/shared/kgcoe-research/gates/Testfiles/ABPModular/DataInstances/"	    # path to folder with Input data files
+"/shared/kgcoe-research/gates/Testfiles/ABPModular/OutputInstances/"	# path to folder storing Output results 
+----------------------------
+
+*/
+
+
+
+
