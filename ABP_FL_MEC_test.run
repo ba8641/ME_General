@@ -81,6 +81,15 @@ param EntName{ent in 1..n_entities} symbolic;
 param pop{1..12};
 param inc{1..12};
 param RP{b in B, 1..12} default 0;
+param tdem{a in A} default 0;
+param totDem default 0;
+param prof{P} default 0;
+param profLP{P} default 0;
+param pdem{A,M} default 0;
+param demM{M} default 0;
+param divAnt{A} default 0;
+param lossLP default 0;
+param lossHP default 0;
 
 
 /* Printing headers of summary file for experiments performed with the script, adjusted to be displayed in Excel with ' ' as a separator */
@@ -91,14 +100,22 @@ print "Week", "Month", "Day", "Time", "Year", "ExpName[i]", "card(tot_iis_indice
 "TotTSS", "TotTCS", "TotTPF", "_total_solve_elapsed_time", "_total_solve_system_time", 
 "_total_solve_user_time", "_total_solve_time", "MV", "TCSL", "TCSLM", "TCSHM", "TCSH", "TPFL", 
 "TPFLM", "TPFHM", "TPFH", "TCS_HP", "TPF_LP", "TCSL_LP", "TCSLM_LP", 
-"TCSHM_LP", "TCSH_LP", "TPFL_LP", "TPFLM_LP", "TPFHM_LP", "TPFH_LP", {b in B} "g[" & b & "]"
+"TCSHM_LP", "TCSH_LP", "TPFL_LP", "TPFLM_LP", "TPFHM_LP", "TPFH_LP", {b in B} "g[" & b & "]",
+{a in A} 'Unsatisfied['&a&']', 'Unsat_Ant_Tot', {p in P} 'Profit['&p&']_HP', {p in P}'Profit['&p&']_LP',
+"N_loss_HP", "N_loss_LP"
  > (PathOut & "sum_performanceC.txt");
+ 
+ print "Experiment", 'Market', {b in B} 'X['&name[b]&',m]', {b in B}'YLow['&name[b]&',m]', {b in B}'YHigh['&name[b]&',m]', {b in B} 'R['&name[b]&',m]-YLow['&name[b]&',m]', {b in B} 'R['&name[b]&',m]-YHigh['&name[b]&',m]', {a in A} 'Unim['&a&']', 'Def_Ant_Tot' > (PathOut & "sum_marketsC.txt");
+print 'Experiment', 'Market', 'Country', 'Births', {b in B}'YLow['&name[b]&',m]', {b in B}'RC['&name[b]&',c]', {b in B} 'RC['&name[b]&',c]-YLow['&name[b]&',m]', {b in B} 'RC['&name[b]&',c]-YHigh['&name[b]&',m]' > (PathOut & "sum_countriesC.txt");
+ 
+ 
+ for {i in 1..NumExp}{ read num_E[i],{j in 1..num_E[i]}ExName[i,j] < "EntFileDetailsTestFL.txt";};
  
 /* Soving ABP with the heuristic, and then using the resulting allocation as 
    input to ABPTCS and ABPTPF. The three-stage loop is done for each of the 
    experiments to be tested */
 
-for{ exp in 1..NumExp}
+for {exp in 1..NumExp}
 {
 	let TotTSS:=0;
 	let TotTCS := 0;
@@ -124,20 +141,27 @@ for{ exp in 1..NumExp}
 	let TPFH_LP := 0;
 	
 	let tottime:=0;
-	read n_entities,{i in 1..n_entities}EntName[i] < EntFileDetailsTestFL.txt;
-
+	let {b in B} producing[b]:=0;
+	reset data n_entities, EntName, lossLP, lossHP, tdem, totDem, prof, profLP, Countries, D, d, gni_p, R, l;
+	let n_entities:= num_E[exp];
+	let {i in 1..n_entities}EntName[i] := ExName[exp,i]; 
+	
 	let {i in 1..12} pop[i]:=0;
 	let {i in 1..12} inc[i]:=0;
 
-	reset data TempS, TempC, DeficitE, DeficitTE, OrigC, X2, Allocation, TotalProfit_h, TotalProfit_l, TotalAntigenDemand, numTargets;
+	reset data divAnt,TempS, TempC, DeficitE, DeficitTE, OrigC, X2, Allocation, TotalProfit_h, TotalProfit_l, TotalAntigenDemand, numTargets;
 
 	for{ i in 1..n_entities}
 	{
 
 	#update data;
 	
-		reset data Countries, annual_births, interest_rate, uncertainty_low, uncertainty_high, targetGNI, alpha, T, C,D, HI, LO, R, S, Xo, bfit, bkpt, d, dH, gni_p, go, hii, k, l, loo, n_antigens, n_bundles, n_linsegments, n_markets, n_producers, name, numiterations, phi, theta, rate, A, A1, B, B1, B2, Bsort, LL, M, N, P, Q, QQ, temps, Xlow, Xup, Ylow, Yup, WOri, WSat, minPrice, YHigh, YLow;
-		let M := 1..(1/n_entities);
+		reset data pdem, demM, Countries, annual_births, interest_rate, uncertainty_low, uncertainty_high, targetGNI, alpha, T, C,D, HI, LO, R, S, Xo, bfit, bkpt, d, dH, gni_p, go, hii, k, l, loo, n_antigens, n_bundles, n_linsegments, n_markets, n_producers, name, numiterations, phi, theta, rate, A, A1, B, B1, B2, Bsort, LL, M, N, P, Q, QQ, temps, Xlow, Xup, Ylow, Yup, WOri, WSat, minPrice, YHigh, YLow;
+		let M_DROP:= (num(substr(EntName[i], match(EntName[i],'m')+1, match(EntName[i],'_ul')-match(EntName[i],'m')-1))/n_entities +1)..194;
+		if num(substr(EntName[i], match(EntName[i],'_-')+2, match(EntName[i],'-'&n_entities&'_e')-match(EntName[i],'_-')-2))
+			< curMarket then {let order := 1;}
+		let curMarket := num(substr(EntName[i], match(EntName[i],'_-')+2, match(EntName[i],'-'&n_entities&'_e')-match(EntName[i],'_-')-2));
+		
 		display ("Solving----" & EntName[i]); 
 	
 
@@ -198,6 +222,12 @@ for{ exp in 1..NumExp}
 		let {m in M, a in A: gni_p[m] < targetGNI} DeficitTE[i,m,a] := (d[a,m]*l[m] - sum{b in B1[a]}X[b,m])/(d[a,m]*l[m]);
 		let {b in B, m in M} X2[b,m] := X[b,m];
 		let {b in B, m in M} Allocation[i,b,m] := X[b,m]*R[b,m];
+		
+		let {a in A, m in M} pdem[a,m] := max(d[a,m]*l[m] - sum{b in B1[a]}X[b,m],0);
+	let {a in A} tdem[a]:= tdem[a] + sum{m in M} pdem[a,m];
+	let {m in M} demM[m]:= sum{a in A}pdem[a,m];
+	let totDem := totDem + sum{a in A} tdem[a];
+	let {a in A} divAnt[a]:= divAnt[a]+sum{m in M}d[a,m]*l[m];
 
 		problem ABPTCSME;
 		restore SuperAdditivity2;
@@ -294,10 +324,19 @@ for{ exp in 1..NumExp}
 		 
 		option print_round 4;
 
-		print {b in B, m in M}: b, name[b], m, X[b,m]*g[b], YLow[b,m]*g[b], YHigh[b,m]*g[b] > (PathOut & "out_"& EntName[i]&".txt");
-		print 'DeficitE', {a in A, m in M} 'Market ' & m & ', antigen ' &a > (PathOut & "out_"& EntName[i]&".txt");
-		print 'DeficitE', {a in A, m in M} DeficitE[i, m,a] > (PathOut & "out_"& EntName[i]&".txt");
+		print {b in B, m in M}: b, name[b], m, X[b,m]*g[b], YLow[b,m]*g[b], YHigh[b,m]*g[b] > (PathOut & "out_"& EntName[i]&"C.txt");
+		print 'DeficitE', {a in A, m in M} 'Market ' & m & ', antigen ' &a > (PathOut & "out_"& EntName[i]&"C.txt");
+		print 'DeficitE', {a in A, m in M} DeficitE[i, m,a] > (PathOut & "out_"& EntName[i]&"C.txt");
 		close (PathOut & "out_" & EntName[i]&".txt");
+		
+		for {m in M}{
+		print EntName[i], (i-1)*card(M)+m, {b in B} X[b,m]*g[b], {b in B}YLow[b,m]*g[b], {b in B}YHigh[b,m]*g[b], {b in B} R[b,m]-YLow[b,m], {b in B} R[b,m]-YHigh[b,m], {a in A} tdem[a], totDem  > (PathOut & "sum_marketsC.txt");
+		for {cnt in 1..194}{ 
+			if Countries[cnt, m] == 1 then {
+				print EntName[i], (i-1)*card(M)+m, cnt, annual_births[cnt], {b in B}YLow[b,m]*g[b], {b in B}RC[b,cnt], {b in B} RC[b,cnt]-YLow[b,m], {b in B} RC[b,cnt]-YHigh[b,m] > (PathOut & "sum_countriesC.txt");
+			}
+		}
+	}
 	
 	#print ctime(), EntName[i], card(tot_iis_indices), TotTSS, TotTCS, TotTPF, _total_solve_elapsed_time, _total_solve_system_time, _total_solve_user_time, _total_solve_time  >> (PathOut & "sum_performanceC.txt");
 
@@ -318,6 +357,14 @@ for{ exp in 1..NumExp}
 	let TotTSS:= TotTSS - sum{b in B}OrigC[b]*producing[b];
 	let TotTPF:= TotTPF - sum{b in B}OrigC[b]*producing[b];
 	let TPF_LP := TPF_LP - sum{b in B}C[b]*producing[b];
+	
+	let {p in P} prof[p] := prof[p] - sum{b in B2[p]}C[b]*producing[b];
+let {p in P} profLP[p] := profLP[p] - sum{b in B2[p]}C[b]*producing[b];
+
+for {p in P}{
+	if prof[p] < 0 then let lossHP:= lossHP+1;
+	if profLP[p] < 0 then let lossLP:= lossLP+1;
+};
 #print 'Weekday', 'Month', 'Day', 'Time', 'Year', "Total", "card(tot_iis_indices)", "TotTSS", "TotTCS", "TotTPF", "_total_solve_elapsed_time", "_total_solve_system_time", "_total_solve_user_time", "_total_solve_time" , {p in P} 'High_Price_profit_for_P' & p, {b in B} 'High_Price_profit_for_B' & b, {p in P} 'Low_Price_profit_for_P' & p, {b in B} 'Low_Price_profit_for_B' & b, {b in B} 'Leftover_for_B' & b >> (PathOut & "sum_performanceC.txt");
 #print ctime(), 'Summary', card(tot_iis_indices), TotTSS, TotTCS, TotTPF, _total_solve_elapsed_time, _total_solve_system_time, _total_solve_user_time, _total_solve_time, {p in P} TotalProfit_h[p], {b in B} BundleProfit_h[b], {p in P} TotalProfit_l[p], {b in B} BundleProfit_l[b], {b in B} TempS[b] >> (PathOut & "sum_performanceC.txt");
 #print ctime(), ExpName[exp], card(tot_iis_indices), TotTSS, TotTCS, TotTPF, _total_solve_elapsed_time, _total_solve_system_time, _total_solve_user_time, _total_solve_time, TotTCST, (TotTCS+TotTPF), (TotTCST/TotTCS), count{p in P}(sum{b in B:k[b]==p}(sum{m in M}(X[b,m]*YHigh[b,m])-C[b]*g[b])<-100), count{p in P} (sum{b in B:k[b]==p}(sum{m in M}(X[b,m]*YLow[b,m])-C[b]*g[b])<-100), count{b in B} (sum{m in M}(X[b,m]*YHigh[b,m])-C[b]*g[b]<-100), count{b in B} (sum{m in M}(X[b,m]*YLow[b,m])-C[b]*g[b] < -100), count{m in M, a in A,i in 1..n_entities} (DeficitE[i,m,a]>100), count{p in P} ((sum{b in B:k[b]==p and g[b] ==1}(C[b] - sum{m in M}(X[b,m]*YHigh[b,m])))/(1e-10+sum{b in B:k[b]==p and g[b] ==1}C[b])>.1), count{p in P} ((sum{b in B:k[b]==p and g[b] ==1}(C[b] - sum{m in M}(X[b,m]*YLow[b,m])))/(1e-10+sum{b in B:k[b]==p and g[b] ==1}C[b])>.1), count{a in A, m in M, i in 1..n_entities} (DeficitE[i,m,a]>100)  >> (PathOut & "sum_performanceC.txt");
@@ -336,13 +383,16 @@ TotTCSH, TotTPFT, TotTPFLM, TotTPFHM, TotTPFH >> (PathOut & "sum_performanceC.tx
 	(TotTCS+TotTPF), TotTCST, 
 	TotTCSLM, TotTCSHM, TotTCSH, TotTPFT, TotTPFLM, TotTPFHM, TotTPFH, 
 	TCS_HP, TPF_LP, TCSL_LP, TCSLM_LP, TCSHM_LP, TCSH_LP, TPFL_LP, TPFLM_LP, TPFHM_LP, TPFH_LP,
-	{b in B} producing[b] >> (PathOut & "sum_performanceC.txt");
+	{b in B} producing[b],
+	{a in A}tdem[a]/divAnt[a], totDem/sum{a in A}divAnt[a], 
+{p in P} prof[p], {p in P}profLP[p], lossHP, lossLP >> (PathOut & "sum_performanceC.txt");
 
 
 };
 
 close (PathOut & "sum_performanceC.txt");
-display sum{i in 1..n_entities, b in B, m in M}Allocation[i,b,m];
+close (PathOut & "sum_marketsC.txt");
+close (PathOut & "sum_countriesC.txt");
 
 end;
 

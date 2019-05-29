@@ -78,6 +78,10 @@ param n_entities;
 param ExpName{1..NumExp} symbolic;
 param tottime default 0;
 
+param mode symbolic;
+param factor symbolic;
+param curMarket default -1;
+param order default 0;
 
 param problemo default 0;
 
@@ -150,6 +154,8 @@ param uncertainty_high;
 param interest_rate;
 param annual_births{1..194};
 #param Countries{1..194, M} default 0;
+param num_E{1..NumExp};
+param ExName{1..NumExp, 1..194} symbolic;
 
 
 	

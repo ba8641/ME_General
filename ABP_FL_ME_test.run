@@ -120,7 +120,8 @@ print "Week", "Month", "Day", "Time", "Year", "ExpName[i]", "card(tot_iis_indice
 print 'Experiment', 'Market', 'Country', 'Births', {b in B}'YLow['&name[b]&',m]', {b in B}'RC['&name[b]&',c]', {b in B} 'RC['&name[b]&',c]-YLow['&name[b]&',m]', {b in B} 'RC['&name[b]&',c]-YHigh['&name[b]&',m]' > (PathOut & "sum_countries.txt");
 	
 
-
+for {i in 1..NumExp}{ read num_E[i],{j in 1..num_E[i]}ExName[i,j] < "EntFileDetailsTestFL.txt";};
+ 
 
 
 
@@ -130,36 +131,37 @@ print 'Experiment', 'Market', 'Country', 'Births', {b in B}'YLow['&name[b]&',m]'
 
 for {exp in 1..NumExp}{
 
-let TotTSS:=0;
-let TotTCS := 0;
-let TotTCST:=0;
-let TotTCSLM:=0;
-let TotTCSHM:=0;
-let TotTCSH:=0;
-let TotTPF:=0;
-let TotTPFT:=0;
-let TotTPFLM:=0;
-let TotTPFHM:=0;
-let TotTPFH:=0;
-
-let TCS_HP := 0;
-	let TPF_LP := 0;
-	let TCSL_LP := 0;
-	let TCSLM_LP := 0; 
-	let TCSHM_LP := 0;
-	let TCSH_LP := 0;
-	let TPFL_LP := 0;
-	let TPFLM_LP := 0;
-	let TPFHM_LP := 0;
-	let TPFH_LP := 0;
+	let TotTSS:=0;
+	let TotTCS := 0;
+	let TotTCST:=0;
+	let TotTCSLM:=0;
+	let TotTCSHM:=0;
+	let TotTCSH:=0;
+	let TotTPF:=0;
+	let TotTPFT:=0;
+	let TotTPFLM:=0;
+	let TotTPFHM:=0;
+	let TotTPFH:=0;
 	
-let tottime:=0;
-let {b in B} producing[b]:=0;
-reset data lossLP, lossHP, tdem, totDem, prof, profLP, Countries, D, d, gni_p, R, l;
-read n_entities,{i in 1..n_entities}EntName[i] < EntFileDetailsTestFL.txt;
-
-let {i in 1..12} pop[i]:=0;
-let {i in 1..12} inc[i]:=0;
+	let TCS_HP := 0;
+		let TPF_LP := 0;
+		let TCSL_LP := 0;
+		let TCSLM_LP := 0; 
+		let TCSHM_LP := 0;
+		let TCSH_LP := 0;
+		let TPFL_LP := 0;
+		let TPFLM_LP := 0;
+		let TPFHM_LP := 0;
+		let TPFH_LP := 0;
+		
+	let tottime:=0;
+	let {b in B} producing[b]:=0;
+	reset data lossLP, lossHP, tdem, totDem, prof, profLP, Countries, D, d, gni_p, R, l;
+	let n_entities:= num_E[exp];
+	let {i in 1..n_entities}EntName[i] := ExName[exp,i]; 
+	
+	let {i in 1..12} pop[i]:=0;
+	let {i in 1..12} inc[i]:=0;
 
 
 reset data divAnt, TempS, DeficitE, DeficitTE, Allocation, X2, TotalProfit_h, TotalProfit_l, numTargets;
@@ -169,7 +171,10 @@ for{ i in 1..n_entities}
 	
 	reset data pdem, demM, Countries, annual_births, interest_rate, uncertainty_low, uncertainty_high, alpha, T, C,D, HI, LO, R, S, Xo, bfit, bkpt, d, dH, gni_p, go, hii, k, l, loo, n_antigens, n_bundles, n_linsegments, n_markets, n_producers, name, numiterations, phi, theta, rate, A, A1, B, B1, B2, Bsort, LL, M, N, P, Q, QQ, temps, Xlow, Xup, Ylow, Yup, WOri, WSat, minPrice, targetGNI, YHigh, YLow;
 	#let M := 1..(12/n_entities);
-	let M_DROP:= (1/n_entities +1)..194;
+	let M_DROP:= (num(substr(EntName[i], match(EntName[i],'m')+1, match(EntName[i],'_ul')-match(EntName[i],'m')-1))/n_entities +1)..194;
+	if num(substr(EntName[i], match(EntName[i],'_-')+2, match(EntName[i],'-'&n_entities&'_e')-match(EntName[i],'_-')-2))
+	< curMarket then {let order := 1;}
+	let curMarket := num(substr(EntName[i], match(EntName[i],'_-')+2, match(EntName[i],'-'&n_entities&'_e')-match(EntName[i],'_-')-2));
 	
 	display ("Solving----" & EntName[i]); 
 	
