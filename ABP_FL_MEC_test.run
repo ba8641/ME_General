@@ -345,9 +345,24 @@ for {exp in 1..NumExp}
 
 		let {b in B} TempS[b] := S[b] - sum{m in M}X[b,m];	#Updates the capacity constraint before the next run.
 		let {b in B} TempC[b] := C[b] - sum{m in M}X[b,m];
-
+	
+	}
+	if n_entities == 1 then {
+		let mode := "Benchmark";
+	}else{
+		let mode := "Invariant";
+	}
 	
 	};
+
+	let factor := "";
+	if order == 1 then{
+		for {i in 1..(n_entities-1)}{let factor := factor&(n_entities+1-i)&",";};
+		let factor := factor&'1';
+	}else{
+		for {i in 1..(n_entities-1)}{let factor := factor&i&",";};
+		let factor := factor&n_entities;
+	}
 
 	let {p in P} TotalProfit_h[p] := TotalProfit_h[p] - sum{b in B: k[b]==p}OrigC[b]*producing[b];
 	let {p in P} TotalProfit_l[p] := TotalProfit_l[p] - sum{b in B: k[b]==p}OrigC[b]*producing[b];
@@ -379,13 +394,19 @@ count{p in P} ((sum{b in B:k[b]==p and g[b] ==1}(OrigC[b] - sum{m in M}(X[b,m]*Y
 (sum{a in A, m in M, i in 1..n_entities: DeficitTE[i,m,a]>0} (DeficitTE[i,m,a]) / (numTargets[i]*card(A))), count{a in A, m in M, i in 1..n_entities} (DeficitTE[i,m,a]>0), 
 TotTCSLM, TotTCSHM, 
 TotTCSH, TotTPFT, TotTPFLM, TotTPFHM, TotTPFH >> (PathOut & "sum_performanceC.txt");*/
-	print ctime(), ExpName[exp], card(tot_iis_indices), TotTSS, TotTCS, TotTPF, _total_solve_elapsed_time, _total_solve_system_time, _total_solve_user_time, _total_solve_time, 
-	(TotTCS+TotTPF), TotTCST, 
-	TotTCSLM, TotTCSHM, TotTCSH, TotTPFT, TotTPFLM, TotTPFHM, TotTPFH, 
-	TCS_HP, TPF_LP, TCSL_LP, TCSLM_LP, TCSHM_LP, TCSH_LP, TPFL_LP, TPFLM_LP, TPFHM_LP, TPFH_LP,
-	{b in B} producing[b],
-	{a in A}tdem[a]/divAnt[a], totDem/sum{a in A}divAnt[a], 
-{p in P} prof[p], {p in P}profLP[p], lossHP, lossLP >> (PathOut & "sum_performanceC.txt");
+print ctime(), mode, num(substr(ExpName[exp], match(ExpName[exp],'m')+1, match(ExpName[exp],'_ul')-match(ExpName[exp],'m')-1)),
+ factor, ExpName[exp], card(tot_iis_indices), "Low", TotTSS, TotTCS, TPF_LP, _total_solve_elapsed_time, _total_solve_system_time, _total_solve_user_time, _total_solve_time, 
+(TotTCS+TotTPF), TotTCST, 
+TotTCSLM, TotTCSHM, TotTCSH, TPFL_LP, TPFLM_LP, TPFHM_LP, TPFH_LP, 
+{b in B} producing[b], {a in A}tdem[a]/divAnt[a], totDem/sum{a in A}divAnt[a], 
+{p in P}profLP[p], lossLP >> (PathOut & "sum_performanceC.txt");
+
+print ctime(), mode, num(substr(ExpName[exp], match(ExpName[exp],'m')+1, match(ExpName[exp],'_ul')-match(ExpName[exp],'m')-1)),
+ factor, ExpName[exp], card(tot_iis_indices), "High", TotTSS, TCS_HP, TotTPF, _total_solve_elapsed_time, _total_solve_system_time, _total_solve_user_time, _total_solve_time, 
+(TotTCS+TotTPF), TCSL_LP, TCSLM_LP, TCSHM_LP, TCSH_LP, TotTPFT, TotTPFLM, TotTPFHM, TotTPFH, 
+{b in B} producing[b], {a in A}tdem[a]/divAnt[a], totDem/sum{a in A}divAnt[a], 
+{p in P} prof[p], lossHP >> (PathOut & "sum_performanceC.txt");
+
 
 
 };

@@ -107,14 +107,12 @@ param lossHP default 0;
 # "Number_of_antigen_deficit_in_target_markets_for_all_entities/_markets_and_entities", 
 # "TotTCSLM", "TotTCSHM", "TotTCSH",
 # "TotTPFL", "TotTPFLM", "TotTPFHM", "TotTPFH" > (PathOut & "sum_performance.txt");
-print "Week", "Month", "Day", "Time", "Year", "ExpName[i]", "card(tot_iis_indices)", 
+print "Week", "Month", "Day", "Time", "Year", "Model", "Market", "Factors", "ExpName[i]", "card(tot_iis_indices)", 
 "TotTSS", "TotTCS", "TotTPF", "_total_solve_elapsed_time", "_total_solve_system_time", 
 "_total_solve_user_time", "_total_solve_time", "MV", "TCSL", "TCSLM", "TCSHM", "TCSH", "TPFL", 
-"TPFLM", "TPFHM", "TPFH", "TCS_HP", "TPF_LP", "TCSL_LP", "TCSLM_LP", 
-"TCSHM_LP", "TCSH_LP", "TPFL_LP", "TPFLM_LP", "TPFHM_LP", "TPFH_LP", {b in B} "g[" & b & "]",
-{a in A} 'Unsatisfied['&a&']', 'Unsat_Ant_Tot', {p in P} 'Profit['&p&']_HP', {p in P}'Profit['&p&']_LP',
-"N_loss_HP", "N_loss_LP"
- > (PathOut & "sum_performance.txt");
+"TPFLM", "TPFHM", "TPFH", {b in B} "g[" & b & "]",
+{a in A} 'Unsatisfied['&a&']', 'Unsat_Ant_Tot', {p in P} 'Profit['&p&']',
+"N_loss" > (PathOut & "sum_performance.txt");
  
  print "Experiment", 'Market', {b in B} 'X['&name[b]&',m]', {b in B}'YLow['&name[b]&',m]', {b in B}'YHigh['&name[b]&',m]', {b in B} 'R['&name[b]&',m]-YLow['&name[b]&',m]', {b in B} 'R['&name[b]&',m]-YHigh['&name[b]&',m]', {a in A} 'Unim['&a&']', 'Def_Ant_Tot' > (PathOut & "sum_markets.txt");
 print 'Experiment', 'Market', 'Country', 'Births', {b in B}'YLow['&name[b]&',m]', {b in B}'RC['&name[b]&',c]', {b in B} 'RC['&name[b]&',c]-YLow['&name[b]&',m]', {b in B} 'RC['&name[b]&',c]-YHigh['&name[b]&',m]' > (PathOut & "sum_countries.txt");
@@ -351,10 +349,25 @@ for{ i in 1..n_entities}
 	
     let tot_iis_indices:={};
 	close (PathDrop & "drop.out"); 
-
+	
 	let {b in B} TempS[b] := S[b] - sum{m in M}X[b,m];	#Updates the capacity constraint before the next run.
-}
+	
+	}
+	if n_entities == 1 then {
+		let mode := "Benchmark";
+	}else{
+		let mode := "Invariant";
+	}
 
+
+let factor := "";
+if order == 1 then{
+	for {i in 1..(n_entities-1)}{let factor := factor&(n_entities+1-i)&",";};
+	let factor := factor&'1';
+}else{
+	for {i in 1..(n_entities-1)}{let factor := factor&i&",";};
+	let factor := factor&n_entities;
+}
 let {p in P} TotalProfit_h[p] := TotalProfit_h[p] - sum{b in B: k[b]==p}C[b]*producing[b];
 let {p in P} TotalProfit_l[p] := TotalProfit_l[p] - sum{b in B: k[b]==p}C[b]*producing[b];
 
@@ -385,12 +398,18 @@ count{p in P} ((sum{b in B:k[b]==p and g[b] ==1}(C[b] - sum{m in M}(X[b,m]*YLow[
 count{a in A, m in M, i in 1..n_entities} (DeficitTE[i,m,a]>0), TotTCSLM, TotTCSHM, TotTCSH, TotTPFT, TotTPFLM, TotTPFHM, TotTPFH >> (PathOut & "sum_performance.txt");
 */
 
-print ctime(), ExpName[exp], card(tot_iis_indices), TotTSS, TotTCS, TotTPF, _total_solve_elapsed_time, _total_solve_system_time, _total_solve_user_time, _total_solve_time, 
+print ctime(), mode, num(substr(ExpName[exp], match(ExpName[exp],'m')+1, match(ExpName[exp],'_ul')-match(ExpName[exp],'m')-1)),
+ factor, ExpName[exp], card(tot_iis_indices), "Low", TotTSS, TotTCS, TPF_LP, _total_solve_elapsed_time, _total_solve_system_time, _total_solve_user_time, _total_solve_time, 
 (TotTCS+TotTPF), TotTCST, 
-TotTCSLM, TotTCSHM, TotTCSH, TotTPFT, TotTPFLM, TotTPFHM, TotTPFH, 
-TCS_HP, TPF_LP, TCSL_LP, TCSLM_LP, TCSHM_LP, TCSH_LP, TPFL_LP, TPFLM_LP, TPFHM_LP, TPFH_LP,
+TotTCSLM, TotTCSHM, TotTCSH, TPFL_LP, TPFLM_LP, TPFHM_LP, TPFH_LP, 
 {b in B} producing[b], {a in A}tdem[a]/divAnt[a], totDem/sum{a in A}divAnt[a], 
-{p in P} prof[p], {p in P}profLP[p], lossHP, lossLP >> (PathOut & "sum_performance.txt");
+{p in P}profLP[p], lossLP >> (PathOut & "sum_performance.txt");
+
+print ctime(), mode, num(substr(ExpName[exp], match(ExpName[exp],'m')+1, match(ExpName[exp],'_ul')-match(ExpName[exp],'m')-1)),
+ factor, ExpName[exp], card(tot_iis_indices), "High", TotTSS, TCS_HP, TotTPF, _total_solve_elapsed_time, _total_solve_system_time, _total_solve_user_time, _total_solve_time, 
+(TotTCS+TotTPF), TCSL_LP, TCSLM_LP, TCSHM_LP, TCSH_LP, TotTPFT, TotTPFLM, TotTPFHM, TotTPFH, 
+{b in B} producing[b], {a in A}tdem[a]/divAnt[a], totDem/sum{a in A}divAnt[a], 
+{p in P} prof[p], lossHP >> (PathOut & "sum_performance.txt");
 
 
 /*print ctime(), ExpName[exp], card(tot_iis_indices), TotTSS, TotTCS, TotTPF, _total_solve_elapsed_time, _total_solve_system_time, _total_solve_user_time, _total_solve_time, TotTCST, 
@@ -403,11 +422,11 @@ count{p in P} ((sum{b in B:k[b]==p and g[b] ==1}(C[b] - sum{m in M}(X[b,m]*YLow[
 (sum{a in A, m in M, i in 1..n_entities: DeficitTE[i,m,a]>0} (DeficitTE[i,m,a]) / (numTargets[exp]*card(A))), 
 count{a in A, m in M, i in 1..n_entities} (DeficitTE[i,m,a]>0), TotTCSLM, TotTCSHM, TotTCSH, TotTPFT, TotTPFLM, TotTPFHM, TotTPFH >> (PathOut & "sum_performance.txt");*/
 #Deficit is divided by count of all entities, rather than those with deficit.	# Assumes all entities have the same number of target markets
-}
+
+};
 close (PathOut & "sum_performance.txt");
 close (PathOut & "sum_markets.txt");
 close (PathOut & "sum_countries.txt");
-
 
 end;
 
