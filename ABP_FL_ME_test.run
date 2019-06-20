@@ -108,7 +108,7 @@ param lossHP default 0;
 # "TotTCSLM", "TotTCSHM", "TotTCSH",
 # "TotTPFL", "TotTPFLM", "TotTPFHM", "TotTPFH" > (PathOut & "sum_performance.txt");
 print "Week", "Month", "Day", "Time", "Year", "Model", "Market", "Factors", "ExpName[i]", "card(tot_iis_indices)", 
-"TotTSS", "TotTCS", "TotTPF", "_total_solve_elapsed_time", "_total_solve_system_time", 
+"Prices", "TotTSS", "TotTCS", "TotTPF", "_total_solve_elapsed_time", "_total_solve_system_time", 
 "_total_solve_user_time", "_total_solve_time", "MV", "TCSL", "TCSLM", "TCSHM", "TCSH", "TPFL", 
 "TPFLM", "TPFHM", "TPFH", {b in B} "g[" & b & "]",
 {a in A} 'Unsatisfied['&a&']', 'Unsat_Ant_Tot', {p in P} 'Profit['&p&']',
@@ -160,6 +160,9 @@ for {exp in 1..NumExp}{
 	
 	let {i in 1..12} pop[i]:=0;
 	let {i in 1..12} inc[i]:=0;
+	
+	let curMarket := 0;
+	let order:=0;
 
 
 reset data divAnt, TempS, DeficitE, DeficitTE, Allocation, X2, TotalProfit_h, TotalProfit_l, numTargets;
@@ -263,7 +266,7 @@ for{ i in 1..n_entities}
 	restore ReservationPriceLimME;
 	restore GenericPrice2;
 	
-	let TotTCS:= TotTCS + TCSME;
+	let TotTCS:= TotTCS + sum{b in B, m in M}(theta*R[b,m]-Y[b,m])*X[b,m];
 	let TotTCST:= TotTCST + sum{b in B, m in M: gni_p[m]<targetGNI}(theta*R[b,m]-Y[b,m])*X[b,m];
 	let TotTCSLM:= TotTCSLM + sum{b in B, m in M: gni_p[m]>targetGNI and gni_p[m] < lmGNI}(theta*R[b,m]-Y[b,m])*X[b,m];
 	let TotTCSHM:= TotTCSHM + sum{b in B, m in M: gni_p[m]>lmGNI and gni_p[m] < hmGNI}(theta*R[b,m]-Y[b,m])*X[b,m];

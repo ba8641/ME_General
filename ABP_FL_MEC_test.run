@@ -96,14 +96,12 @@ param lossHP default 0;
 
 	#print 'Weekday', 'Month', 'Day', 'Time', 'Year', "ExpName[i]", "card(tot_iis_indices)", "TotTSS", "TotTCS", "TotTPF", "_total_solve_elapsed_time", "_total_solve_system_time", "_total_solve_user_time", "_total_solve_time" , {p in P} 'High_Price_profit_for_P' & p, {b in B} 'High_Price_profit_for_B' & b, {p in P} 'Low_Price_profit_for_P' & p, {b in B} 'Low_Price_profit_for_B' & b, {b in B} 'Leftover_for_B' & b >> (PathOut & "sum_performanceC.txt");
 #print "Week", "Month", "Day", "Time", "Year", "ExpName[i]", "card(tot_iis_indices)", "TotTSS", "TotTCS", "TotTPF", "_total_solve_elapsed_time", "_total_solve_system_time", "_total_solve_user_time", "_total_solve_time", "TotTCST", "MV", "TTCS/TCS", "RelDeficit_HP_P", "Deficit_HP_P", "Deficit_LP_P", "Deficit_HP_B", "Deficit_LP_B", "Deficit_antigen", "%_AC_HP", "%_AC_LP", "RelDeficitT_antigen", "DeficitT_antigen", "TotTCSLM", "TotTCSHM", "TotTCSH", "TotTPFL", "TotTPFLM", "TotTPFHM", "TotTPFH" > (PathOut & "sum_performanceC.txt");
-print "Week", "Month", "Day", "Time", "Year", "ExpName[i]", "card(tot_iis_indices)", 
-"TotTSS", "TotTCS", "TotTPF", "_total_solve_elapsed_time", "_total_solve_system_time", 
+print "Week", "Month", "Day", "Time", "Year", "Model", "Market", "Factors", "ExpName[i]", "card(tot_iis_indices)", 
+"Prices", "TotTSS", "TotTCS", "TotTPF", "_total_solve_elapsed_time", "_total_solve_system_time", 
 "_total_solve_user_time", "_total_solve_time", "MV", "TCSL", "TCSLM", "TCSHM", "TCSH", "TPFL", 
-"TPFLM", "TPFHM", "TPFH", "TCS_HP", "TPF_LP", "TCSL_LP", "TCSLM_LP", 
-"TCSHM_LP", "TCSH_LP", "TPFL_LP", "TPFLM_LP", "TPFHM_LP", "TPFH_LP", {b in B} "g[" & b & "]",
-{a in A} 'Unsatisfied['&a&']', 'Unsat_Ant_Tot', {p in P} 'Profit['&p&']_HP', {p in P}'Profit['&p&']_LP',
-"N_loss_HP", "N_loss_LP"
- > (PathOut & "sum_performanceC.txt");
+"TPFLM", "TPFHM", "TPFH", {b in B} "g[" & b & "]",
+{a in A} 'Unsatisfied['&a&']', 'Unsat_Ant_Tot', {p in P} 'Profit['&p&']',
+"N_loss" > (PathOut & "sum_performanceC.txt");
  
  print "Experiment", 'Market', {b in B} 'X['&name[b]&',m]', {b in B}'YLow['&name[b]&',m]', {b in B}'YHigh['&name[b]&',m]', {b in B} 'R['&name[b]&',m]-YLow['&name[b]&',m]', {b in B} 'R['&name[b]&',m]-YHigh['&name[b]&',m]', {a in A} 'Unim['&a&']', 'Def_Ant_Tot' > (PathOut & "sum_marketsC.txt");
 print 'Experiment', 'Market', 'Country', 'Births', {b in B}'YLow['&name[b]&',m]', {b in B}'RC['&name[b]&',c]', {b in B} 'RC['&name[b]&',c]-YLow['&name[b]&',m]', {b in B} 'RC['&name[b]&',c]-YHigh['&name[b]&',m]' > (PathOut & "sum_countriesC.txt");
@@ -148,8 +146,13 @@ for {exp in 1..NumExp}
 	
 	let {i in 1..12} pop[i]:=0;
 	let {i in 1..12} inc[i]:=0;
+	
+	let curMarket := 0;
+	let order:=0;
 
 	reset data divAnt,TempS, TempC, DeficitE, DeficitTE, OrigC, X2, Allocation, TotalProfit_h, TotalProfit_l, TotalAntigenDemand, numTargets;
+
+	
 
 	for{ i in 1..n_entities}
 	{
@@ -253,6 +256,8 @@ for {exp in 1..NumExp}
 		    	solve ABPTCSME;
 	    	};
     
+    	let {p in P} profLP[p] := profLP[p] + sum{b in B2[p], m in M}X[b,m]*Y[b,m];
+    
    		problem ABPTPFME;
 		restore SuperAdditivity2;
 		restore SegmentedPrices;
@@ -260,7 +265,7 @@ for {exp in 1..NumExp}
 		restore PriceElasticity;
 		restore ReservationPriceLimME;
 		restore GenericPrice2;
-		let TotTCS:= TotTCS + TCSME;
+		let TotTCS:= TotTCS + sum{b in B, m in M}(theta*R[b,m]-Y[b,m])*X[b,m];
 		let TotTCST:= TotTCST + sum{b in B, m in M: gni_p[m]<targetGNI}(theta*R[b,m]-Y[b,m])*X[b,m];
 		let TotTCSLM:= TotTCSLM + sum{b in B, m in M: gni_p[m]>targetGNI and gni_p[m] < lmGNI}(theta*R[b,m]-Y[b,m])*X[b,m];
 		let TotTCSHM:= TotTCSHM + sum{b in B, m in M: gni_p[m]>lmGNI and gni_p[m] < hmGNI}(theta*R[b,m]-Y[b,m])*X[b,m];
@@ -289,7 +294,7 @@ for {exp in 1..NumExp}
         };
 	
 	
-	
+		let {p in P} prof[p] := prof[p] + sum{b in B2[p], m in M}X[b,m]*Y[b,m];
 		let TotTPF:= TotTPF + sum{b in B, m in T[b]} Y[b,m]*X[b,m];
 		let TotTPFT:= TotTPFT + sum{b in B, m in T[b]: gni_p[m]<targetGNI} Y[b,m]*X[b,m];
 		let TotTPFLM:= TotTPFLM + sum{b in B, m in T[b]: gni_p[m]>targetGNI and gni_p[m] < lmGNI} Y[b,m]*X[b,m];
@@ -350,10 +355,9 @@ for {exp in 1..NumExp}
 	if n_entities == 1 then {
 		let mode := "Benchmark";
 	}else{
-		let mode := "Invariant";
+		let mode := "Adjusted";
 	}
 	
-	};
 
 	let factor := "";
 	if order == 1 then{
