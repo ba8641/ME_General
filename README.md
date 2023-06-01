@@ -7,3 +7,4 @@ The files are organized as follows:
 - ABP_base.mod, ABP_ME.mod and ABP_Distribution.mod are all AMPL model files that specifies the objective functions that were used in the research, as well as additional constraints or functions that were explored but did not make into the final version of this paper.
 - ABP_FL_test.run is the main AMPL script that runs all experiments. Its variations ABP_FL_ME_test.run and ABP_FL_MEC_test.run are called in the code, respectively, when exploring no discounts or including discounts.
 - ExpFileDetailsTestFL.txt and EntFileDetailsFL.txt are input files for the AMPL script that specify which and in what order the datafiles should be read to properly represent the configuration of markets and entities being simulated.
+- DataIn.7zip contains the data used as input for the experiments, separated into multiple files due to its size.
